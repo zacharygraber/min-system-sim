@@ -184,14 +184,23 @@
                     engine.resize();
             });
 
+            function yzRadiusAtX(x) {
+                if (Math.abs(x) > 15.8) {
+                    return Math.pow(64 - Math.pow(Math.abs(x) - 15.8, 2), 0.5);
+                }
+                return 8;
+            }
+
             // Gets a random position inside the capsule as a Vector3
             function randomCapsulePosition() {
                 // Cylinder is from -15.8 to 15.8, -24 to -15.8 and 15.8 to 24 are half-spheres 
                 var point = BABYLON.Vector3.Zero();
+                // Generates 3 points, the position along the x-axis, then r and theta depending on the max radius at x
                 var x = (Math.random() * 48) - 24;
-                var y = (Math.random() * 12) - 6;
-                var z = (Math.random() * 12) - 6;
-                point.set(x, y, z);
+                var r = Math.random() * yzRadiusAtX; // Radius between 0 and max
+                var theta = Math.random() * Math.PI * 2; // Angle between 0 and 2pi
+                console.log("x = " + x + ", r = " + r + " , theta = " + theta);
+                point.set(x, Math.sin(theta) * r, Math.cos(theta) * r);
                 return point;
             }
 
@@ -210,6 +219,7 @@
                 return returnArray;
             }
 
+            // For debugging
             function showWorldAxis(size) {
                 var makeTextPlane = function(text, color, size) {
                     var dynamicTexture = new BABYLON.DynamicTexture("DynamicTexture", 50, scene, true);
