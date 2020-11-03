@@ -38,6 +38,7 @@
             constructor(shape, vel) {
                 this.velocity = vel;
                 this.shape = shape;
+                this.stuckToSide = false;
             }
 
             positionAfterMove() {
@@ -48,7 +49,9 @@
             }
 
             move() {
-                this.shape.setAbsolutePosition(this.positionAfterMove());
+                if (!this.stuckToSide) {
+                    this.shape.setAbsolutePosition(this.positionAfterMove());
+                }
             }
         }
 
@@ -119,7 +122,7 @@
 
             var speedSlider = new BABYLON.GUI.Slider();
             speedSlider.minimum = 1;
-            speedSlider.maximum = 50;
+            speedSlider.maximum = 10;
             speedSlider.value = 1;
             speedSlider.isThumbCircle = true;
             speedSlider.isVertical = true;
@@ -146,6 +149,7 @@
 
                 // Creating spheres to represent minC, minD, and FtsZ
                 minC = generateMinC(600);
+                ftsz = generateftsz(600);
             }
 
             minERingTask.onSuccess = function (task) {
@@ -173,6 +177,48 @@
                         // Move MinC particles
                         for (let i = 0; i < minC.length; i++) {
                             minC[i].move();
+                            if (!minC[i].stuckToSide) {
+                                if (!pointInsideCapsule(minC[i].shape.position)) {
+                                    minC[i].stuckToSide = true;
+                                }
+                            }
+                            else {
+                                // If the minC is bound to the cell wall and the minE Ring hits it, release
+                                if (Math.abs(minERing.position.x - minC[i].shape.position.x) < 0.25) {
+                                    minC[i].velocity = new BABYLON.Vector3(minC[i].velocity.x*-1, minC[i].velocity.y*-1, minC[i].velocity.z*-1);
+                                    minC[i].stuckToSide = false;
+                                }
+                            }
+                        }
+
+                        // Move ftsz
+                        for (let i = 0; i < ftsz.length; i++) {
+                            let ftszPos = ftsz[i].shape.position;
+                            ftsz[i].move();
+                            // Check each ftsz against each minC
+                            if (!ftsz[i].stuckToSide) {
+                                if (!pointInsideCapsule(ftszPos)) {
+                                    let collidingWithMinC = false;
+                                    for (let j = 0; j < minC.length && !collidingWithMinC; j++) {
+                                        let minCPos = minC[j].position;
+                                        if (Math.abs(ftszPos.x - minCPos.x) < 0.8) {
+                                            if (Math.abs(ftszPos.y - minCpos.y) < 0.8) {
+                                                if (Math.abs(ftszPos.z - minCPos.z) < 0.8) {
+                                                    collidingWithMinC = true
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (!collidingWithMinC) {
+                                        ftsz[i].stuckToSide = true;
+                                    }
+                                    else {
+                                        ftsz[i].velocity = new BABYLON.Vector3(ftsz[i].velocity.x*-1, ftsz[i].velocity.y*-1, ftsz[i].velocity.z*-1);
+                                    }
+                                }
+                            }
+                            
                         }
                     }
                     scene.render();
@@ -225,8 +271,22 @@
                     let sphere = BABYLON.MeshBuilder.CreateSphere("minC " + i, {diameter:0.4}, scene);
                     sphere.material = minCMat;
                     sphere.position = randomCapsulePosition();
-                    sphereVel = new BABYLON.Vector3((Math.random() * 0.2) - 0.1, (Math.random() * 0.2) - 0.1, (Math.random() * 0.2) - 0.1);
+                    sphereVel = new BABYLON.Vector3((Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05);
                     returnArray.push(new Particle(sphere, sphereVel));
+                }
+                return returnArray;
+            }
+
+            function generateftsz(amount) {
+                var returnArray = [];
+                var ftszMat = new BABYLON.StandardMaterial("ftszMaterial", scene);
+                ftszMat.diffuseColor = new BABYLON.Color3(191, 67, 0);
+                for (let i = 0; i < amount; i++) {
+                    let cube = BABYLON.MeshBuilder.CreateBox("ftsz " + i, {size:0.4}, scene);
+                    cube.material = ftszMat;
+                    cube.position = randomCapsulePosition();
+                    cubeVel = new BABYLON.Vector3((Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05);
+                    returnArray.push(new Particle(cube, cubeVel));
                 }
                 return returnArray;
             }
