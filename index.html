@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title>Min System Simulation</title>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+        </style>
+
+        <script src="https://preview.babylonjs.com/babylon.js"></script>
+        <script src="https://preview.babylonjs.com/gui/babylon.gui.js"></script>
+        <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+        <script src="https://code.jquery.com/pep/0.4.3/pep.js"></script>
+    </head>
+
+   <body>
+
+    <canvas id="renderCanvas" touch-action="none"></canvas> <!-- touch-action="none" for best results from PEP -->
+
+    <script>
+        var timeScale = 1;
+
+        class Particle {
+            constructor(shape, vel) {
+                this.velocity = vel;
+                this.shape = shape;
+                this.stuckToSide = false;
+            }
+
+            positionAfterMove() {
+                let newX = this.shape.position.x + (this.velocity.x * timeScale);
+                let newY = this.shape.position.y + (this.velocity.y * timeScale);
+                let newZ = this.shape.position.z + (this.velocity.z * timeScale);
+                return new BABYLON.Vector3(newX, newY, newZ);
+            }
+
+            move() {
+                if (!this.stuckToSide) {
+                    this.shape.setAbsolutePosition(this.positionAfterMove());
+                }
+            }
+        }
+
+        var canvas = document.getElementById("renderCanvas"); // Get the canvas element
+        var engine = new BABYLON.Engine(canvas, true); // Generate the BABYLON 3D engine
+
+        /******* Add the create scene function ******/
+        var createScene = function () {
+            var running = false;
+            var scene = new BABYLON.Scene(engine);
+
+            //Adding light
+            var hemiLight = new BABYLON.HemisphericLight("HemiLight", new BABYLON.Vector3(0, 1, 0), scene);
+            var hemiLight2 = new BABYLON.HemisphericLight("HemiLight", new BABYLON.Vector3(0, -1, 0), scene);
+
+            //Adding an Arc Rotate Camera
+            var camera = new BABYLON.ArcRotateCamera("Camera", 0, 0.8, 100, BABYLON.Vector3.Zero(), scene);
+            camera.attachControl(canvas, false);
+
+            // Loading the custom meshes
+            var assetsManager = new BABYLON.AssetsManager(scene);
+            var capsuleTask = assetsManager.addMeshTask("capsule task", "", "models/", "capsule.babylon");
+            var capsuleInteriorTask = assetsManager.addMeshTask("capsule interior task", "", "models/", "capsuleInterior.babylon");
+            var minERingTask = assetsManager.addMeshTask("minE ring task", "", "models/", "minERing.babylon");
+            var ringVelocity = 0.05;
+            var ringScale = 8;
+            var capsuleInterior;
+            var minERing;
+            var minC;
+
+            // Creating GUI
+            var gui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("mainGUI");
+            var pausePlayButton = BABYLON.GUI.Button.CreateImageOnlyButton(
+                "pausePlay",
+                "images/play.png"
+            );
+            pausePlayButton.height = "60px";
+            pausePlayButton.width = "60px";
+            pausePlayButton.cornerRadius = 20;
+            pausePlayButton.left = "45%";
+            pausePlayButton.onPointerUpObservable.add(function () {
+                if (running == true) {
+                    running = false;
+                    pausePlayButton.image.source = "images/play.png";
+                }
+                else {
+                    running = true;
+                    pausePlayButton.image.source = "images/pause.png";
+                }
+            });
+            gui.addControl(pausePlayButton);
+
+            var speedText = new BABYLON.GUI.TextBlock();
+            speedText.text = "Speed";
+            speedText.height = "20px";
+            speedText.left = "45%";
+            speedText.top = "10%";
+            speedText.color = "white";
+            gui.addControl(speedText);
+            
+            var sliderLabel = new BABYLON.GUI.TextBlock();
+            sliderLabel.text = timeScale + "x";
+            sliderLabel.height = "20px";
+            sliderLabel.left = "45%";
+            sliderLabel.top = "45%";
+            sliderLabel.color = "white";
+            gui.addControl(sliderLabel);
+
+            var speedSlider = new BABYLON.GUI.Slider();
+            speedSlider.minimum = 1;
+            speedSlider.maximum = 10;
+            speedSlider.value = 1;
+            speedSlider.isThumbCircle = true;
+            speedSlider.isVertical = true;
+            speedSlider.height = "30%";
+            speedSlider.width = "20px";
+            speedSlider.left = "45%";
+            speedSlider.top = "27%";
+            speedSlider.onValueChangedObservable.add(function () {
+                timeScale = speedSlider.value;
+                // Rounded to one decimal place
+                sliderLabel.text = (Math.round(timeScale * 10) / 10) + "x";
+            });
+            gui.addControl(speedSlider);
+            
+            capsuleTask.onSuccess = function (task) {
+                task.loadedMeshes[0].position = BABYLON.Vector3.Zero();
+                task.loadedMeshes[0].scaling = new BABYLON.Vector3(10, 10, 10);
+            }
+
+            capsuleInteriorTask.onSuccess = function (task) {
+                task.loadedMeshes[0].position = BABYLON.Vector3.Zero();
+                task.loadedMeshes[0].scaling = new BABYLON.Vector3(9, 9.5, 9);
+                capsuleInterior = task.loadedMeshes[0];
+
+                // Creating spheres to represent minC, minD, and FtsZ
+                minC = generateMinC(600);
+                ftsz = generateftsz(600);
+            }
+
+            minERingTask.onSuccess = function (task) {
+                task.loadedMeshes[0].position = BABYLON.Vector3.Zero();
+                task.loadedMeshes[0].scaling = new BABYLON.Vector3(8, 8, 8);
+                task.loadedMeshes[0].rotation = new BABYLON.Vector3(0, 0, Math.PI / 2);
+                minERing = task.loadedMeshes[0];
+            }
+            
+            assetsManager.onFinish = function (tasks) {
+                engine.runRenderLoop(function () {
+                    if (running == true) {
+                        // Scale and move the minE ring
+                        if (Math.abs(minERing.position.x) > 15.8)
+                        {
+                            ringScale = Math.pow(64 - Math.pow(Math.abs(minERing.position.x) - 15.8, 2), 0.5);
+                            if (Math.abs(minERing.position.x) > 24)
+                            {
+                                ringVelocity *= -1;
+                            }
+                        }
+                        minERing.scaling = new BABYLON.Vector3(ringScale, ringScale, ringScale);
+                        minERing.setAbsolutePosition(new BABYLON.Vector3(minERing.position.x + (ringVelocity * timeScale), 0, 0));
+
+                        // Move MinC particles
+                        for (let i = 0; i < minC.length; i++) {
+                            minC[i].move();
+                            if (!minC[i].stuckToSide) {
+                                if (!pointInsideCapsule(minC[i].shape.position)) {
+                                    minC[i].stuckToSide = true;
+                                }
+                            }
+                            else {
+                                // If the minC is bound to the cell wall and the minE Ring hits it, release
+                                if (Math.abs(minERing.position.x - minC[i].shape.position.x) < 0.25) {
+                                    minC[i].velocity = new BABYLON.Vector3(minC[i].velocity.x*-1, minC[i].velocity.y*-1, minC[i].velocity.z*-1);
+                                    minC[i].stuckToSide = false;
+                                }
+                            }
+                        }
+
+                        // Move ftsz
+                        for (let i = 0; i < ftsz.length; i++) {
+                            let ftszPos = ftsz[i].shape.position;
+                            ftsz[i].move();
+                            // Check each ftsz against each minC
+                            if (!ftsz[i].stuckToSide) {
+                                if (!pointInsideCapsule(ftszPos)) {
+                                    let collidingWithMinC = false;
+                                    for (let j = 0; j < minC.length && !collidingWithMinC; j++) {
+                                        let minCPos = minC[j].position;
+                                        if (Math.abs(ftszPos.x - minCPos.x) < 0.8) {
+                                            if (Math.abs(ftszPos.y - minCpos.y) < 0.8) {
+                                                if (Math.abs(ftszPos.z - minCPos.z) < 0.8) {
+                                                    collidingWithMinC = true
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (!collidingWithMinC) {
+                                        ftsz[i].stuckToSide = true;
+                                    }
+                                    else {
+                                        ftsz[i].velocity = new BABYLON.Vector3(ftsz[i].velocity.x*-1, ftsz[i].velocity.y*-1, ftsz[i].velocity.z*-1);
+                                    }
+                                }
+                            }
+                            
+                        }
+                    }
+                    scene.render();
+                });
+            };
+
+            // Watch for browser/canvas resize events
+            window.addEventListener("resize", function () {
+                    engine.resize();
+            });
+
+            function yzRadiusAtX(x) {
+                if (Math.abs(x) > 15.8) {
+                    return Math.pow(64 - Math.pow(Math.abs(x) - 15.8, 2), 0.5);
+                }
+                return 8;
+            }
+
+            function pointInsideCapsule(p) {
+                if (Math.abs(p.x) > 24) {
+                    return false;
+                }
+                // The center axis of the capsule and the y,z coordinates form a right triangle
+                // If the linear distance between the center point of this plane and the y,z point > radius, return false
+                if (Math.sqrt(Math.pow(p.z, 2) + Math.pow(p.y, 2)) > yzRadiusAtX(p.x)) {
+                    return false
+                }
+                return true;
+            }
+
+            // Gets a random position inside the capsule as a Vector3
+            function randomCapsulePosition() {
+                // Cylinder is from -15.8 to 15.8, -24 to -15.8 and 15.8 to 24 are half-spheres 
+                var point = BABYLON.Vector3.Zero();
+                // Generates 3 points, the position along the x-axis, then r and theta depending on the max radius at x
+                var x = (Math.random() * 48) - 24;
+                var r = Math.random() * yzRadiusAtX(x); // Radius between 0 and max
+                var theta = Math.random() * Math.PI * 2; // Angle between 0 and 2pi
+                console.log("x = " + x + ", r = " + r + " , theta = " + theta);
+                point.set(x, Math.sin(theta) * r, Math.cos(theta) * r);
+                return point;
+            }
+
+            // Generates an array of minC Particles
+            function generateMinC(amount) {
+                var returnArray = [];
+                var minCMat = new BABYLON.StandardMaterial("minCMaterial", scene);
+                minCMat.diffuseColor = new BABYLON.Color3(0.921, 0, 0.675);
+                for (let i = 0; i < amount; i++) {
+                    let sphere = BABYLON.MeshBuilder.CreateSphere("minC " + i, {diameter:0.4}, scene);
+                    sphere.material = minCMat;
+                    sphere.position = randomCapsulePosition();
+                    sphereVel = new BABYLON.Vector3((Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05);
+                    returnArray.push(new Particle(sphere, sphereVel));
+                }
+                return returnArray;
+            }
+
+            function generateftsz(amount) {
+                var returnArray = [];
+                var ftszMat = new BABYLON.StandardMaterial("ftszMaterial", scene);
+                ftszMat.diffuseColor = new BABYLON.Color3(191, 67, 0);
+                for (let i = 0; i < amount; i++) {
+                    let cube = BABYLON.MeshBuilder.CreateBox("ftsz " + i, {size:0.4}, scene);
+                    cube.material = ftszMat;
+                    cube.position = randomCapsulePosition();
+                    cubeVel = new BABYLON.Vector3((Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05);
+                    returnArray.push(new Particle(cube, cubeVel));
+                }
+                return returnArray;
+            }
+
+            // For debugging
+            function showWorldAxis(size) {
+                var makeTextPlane = function(text, color, size) {
+                    var dynamicTexture = new BABYLON.DynamicTexture("DynamicTexture", 50, scene, true);
+                    dynamicTexture.hasAlpha = true;
+                    dynamicTexture.drawText(text, 5, 40, "bold 36px Arial", color , "transparent", true);
+                    var plane = BABYLON.Mesh.CreatePlane("TextPlane", size, scene, true);
+                    plane.material = new BABYLON.StandardMaterial("TextPlaneMaterial", scene);
+                    plane.material.backFaceCulling = false;
+                    plane.material.specularColor = new BABYLON.Color3(0, 0, 0);
+                    plane.material.diffuseTexture = dynamicTexture;
+                return plane;
+                };
+                var axisX = BABYLON.Mesh.CreateLines("axisX", [ 
+                BABYLON.Vector3.Zero(), new BABYLON.Vector3(size, 0, 0), new BABYLON.Vector3(size * 0.95, 0.05 * size, 0), 
+                new BABYLON.Vector3(size, 0, 0), new BABYLON.Vector3(size * 0.95, -0.05 * size, 0)
+                ], scene);
+                axisX.color = new BABYLON.Color3(1, 0, 0);
+                var xChar = makeTextPlane("X", "red", size / 10);
+                xChar.position = new BABYLON.Vector3(0.9 * size, -0.05 * size, 0);
+                var axisY = BABYLON.Mesh.CreateLines("axisY", [
+                    BABYLON.Vector3.Zero(), new BABYLON.Vector3(0, size, 0), new BABYLON.Vector3( -0.05 * size, size * 0.95, 0), 
+                    new BABYLON.Vector3(0, size, 0), new BABYLON.Vector3( 0.05 * size, size * 0.95, 0)
+                    ], scene);
+                axisY.color = new BABYLON.Color3(0, 1, 0);
+                var yChar = makeTextPlane("Y", "green", size / 10);
+                yChar.position = new BABYLON.Vector3(0, 0.9 * size, -0.05 * size);
+                var axisZ = BABYLON.Mesh.CreateLines("axisZ", [
+                    BABYLON.Vector3.Zero(), new BABYLON.Vector3(0, 0, size), new BABYLON.Vector3( 0 , -0.05 * size, size * 0.95),
+                    new BABYLON.Vector3(0, 0, size), new BABYLON.Vector3( 0, 0.05 * size, size * 0.95)
+                    ], scene);
+                axisZ.color = new BABYLON.Color3(0, 0, 1);
+                var zChar = makeTextPlane("Z", "blue", size / 10);
+                zChar.position = new BABYLON.Vector3(0, 0.05 * size, 0.9 * size);
+            };
+
+            showWorldAxis(50);
+            
+            assetsManager.load();
+        
+            return scene;
+        }
+        /******* End of the create scene function ******/
+
+        var scene = createScene(); //Call the createScene function
+    </script>
+
+   </body>
+
+</html>
