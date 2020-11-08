@@ -33,6 +33,9 @@
 
     <script>
         var timeScale = 1;
+        var particleDiameter = 0.6;
+        var minCAmount = 800;
+        var ftszAmount = 200;
 
         class Particle {
             constructor(shape, vel) {
@@ -148,8 +151,8 @@
                 capsuleInterior = task.loadedMeshes[0];
 
                 // Creating spheres to represent minC, minD, and FtsZ
-                minC = generateMinC(600);
-                ftsz = generateftsz(600);
+                minC = generateMinC(minCAmount);
+                ftsz = generateftsz(ftszAmount);
             }
 
             minERingTask.onSuccess = function (task) {
@@ -195,30 +198,34 @@
                         for (let i = 0; i < ftsz.length; i++) {
                             let ftszPos = ftsz[i].shape.position;
                             ftsz[i].move();
-                            // Check each ftsz against each minC
                             if (!ftsz[i].stuckToSide) {
                                 if (!pointInsideCapsule(ftszPos)) {
-                                    let collidingWithMinC = false;
-                                    for (let j = 0; j < minC.length && !collidingWithMinC; j++) {
-                                        let minCPos = minC[j].position;
-                                        if (Math.abs(ftszPos.x - minCPos.x) < 0.8) {
-                                            if (Math.abs(ftszPos.y - minCpos.y) < 0.8) {
-                                                if (Math.abs(ftszPos.z - minCPos.z) < 0.8) {
-                                                    collidingWithMinC = true
-                                                }
+                                    ftsz[i].stuckToSide = true;
+                                }
+                            }
+                        }
+
+                        // Check for collision between stuck ftsz and minC
+                        for (let i = 0; i < ftsz.length; i++) {
+                            if (ftsz[i].stuckToSide) {
+                                let ftszPos = ftsz[i].shape.position;
+                                // Check each ftsz against each minC
+                                let collidingWithMinC = false;
+                                for (let j = 0; j < minC.length && !collidingWithMinC; j++) {
+                                    let minCPos = minC[j].shape.position;
+                                    if (Math.abs(ftszPos.x - minCPos.x) < particleDiameter*2) {
+                                        if (Math.abs(ftszPos.y - minCPos.y) < particleDiameter*2) {
+                                            if (Math.abs(ftszPos.z - minCPos.z) < particleDiameter*2) {
+                                                collidingWithMinC = true
                                             }
                                         }
                                     }
-
-                                    if (!collidingWithMinC) {
-                                        ftsz[i].stuckToSide = true;
-                                    }
-                                    else {
-                                        ftsz[i].velocity = new BABYLON.Vector3(ftsz[i].velocity.x*-1, ftsz[i].velocity.y*-1, ftsz[i].velocity.z*-1);
-                                    }
+                                }
+                                if (collidingWithMinC) {
+                                    ftsz[i].stuckToSide = false;
+                                    ftsz[i].velocity = new BABYLON.Vector3(ftsz[i].velocity.x*-1, ftsz[i].velocity.y*-1, ftsz[i].velocity.z*-1);
                                 }
                             }
-                            
                         }
                     }
                     scene.render();
@@ -268,7 +275,7 @@
                 var minCMat = new BABYLON.StandardMaterial("minCMaterial", scene);
                 minCMat.diffuseColor = new BABYLON.Color3(0.921, 0, 0.675);
                 for (let i = 0; i < amount; i++) {
-                    let sphere = BABYLON.MeshBuilder.CreateSphere("minC " + i, {diameter:0.4}, scene);
+                    let sphere = BABYLON.MeshBuilder.CreateSphere("minC " + i, {diameter:particleDiameter}, scene);
                     sphere.material = minCMat;
                     sphere.position = randomCapsulePosition();
                     sphereVel = new BABYLON.Vector3((Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05);
@@ -282,7 +289,7 @@
                 var ftszMat = new BABYLON.StandardMaterial("ftszMaterial", scene);
                 ftszMat.diffuseColor = new BABYLON.Color3(191, 67, 0);
                 for (let i = 0; i < amount; i++) {
-                    let cube = BABYLON.MeshBuilder.CreateBox("ftsz " + i, {size:0.4}, scene);
+                    let cube = BABYLON.MeshBuilder.CreateBox("ftsz " + i, {size:particleDiameter}, scene);
                     cube.material = ftszMat;
                     cube.position = randomCapsulePosition();
                     cubeVel = new BABYLON.Vector3((Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05, (Math.random() * 0.1) - 0.05);
